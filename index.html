@@ -1304,7 +1304,7 @@ body{
 .sol-wheels .ptr{position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:0;height:0;z-index:3;
   border-left:9px solid transparent;border-right:9px solid transparent;border-top:16px solid #ffd27a;
   filter:drop-shadow(0 4px 10px rgba(255,180,80,.8))}
-.sol-ladder{position:relative;width:100%;flex:1;min-height:0}
+.sol-ladder{position:relative;width:100%;max-width:340px;margin:0 auto;flex:1 1 auto;min-height:0;max-height:420px}
 .sol-ladder canvas{width:100%;height:100%;display:block}
 .sol-ladder .pick{position:absolute;left:0;right:0;display:grid;gap:0}
 
@@ -1313,6 +1313,7 @@ body{
   z-index:80;padding:9px 15px;border-radius:13px;background:rgba(20,12,28,.94);border:1px solid rgba(255,180,72,.4);
   color:#ffe9cf;font-size:12px;font-weight:800;box-shadow:0 10px 24px rgba(0,0,0,.5);max-width:88vw;text-align:center}
 .mp-rrow .me{color:#ffd08a;font-style:normal;font-size:11px}
+.mpres-note{font-size:10.5px;color:#a898c4;text-align:center;font-weight:700;line-height:1.4;padding:2px 0 0}
 
 </style>
 </head>
@@ -7432,7 +7433,14 @@ function mpPickCode(){
   return c;
 }
 function mpInviteUrl(){
-  return 'https://xoghksl9978.github.io/Hanbang/?room=' + MP.code;
+  let base = 'https://xoghksl9978.github.io/Hanbang/';
+  try {
+    const here = location.href.split('#')[0].split('?')[0];
+    if (/^https?:/.test(location.protocol) && !/^https?:\/\/(localhost|127\.0\.0\.1)/.test(location.origin)){
+      base = here;
+    }
+  } catch(e){}
+  return base + '?room=' + MP.code;
 }
 
 /* ---------------- screens ---------------- */
@@ -7606,7 +7614,16 @@ function mpJoinLoop(){
     if (!MP.connected || MP.role !== 'guest') return;
     mpPub({ t:'join', id: MP.myId, name: MP.name });
     n++;
-    if (n >= 12 && MP.joinTimer){ clearInterval(MP.joinTimer); MP.joinTimer = null; }
+    if (n >= 12 && MP.joinTimer){
+      clearInterval(MP.joinTimer);
+      MP.joinTimer = null;
+      if (!MP.players.length){
+        mpSetConn('방을 찾지 못했어요', 'bad');
+        const note = mpQ('#mpStartNote');
+        if (note) note.textContent = '방 코드를 확인해 주세요 · 없으면 방장에게 다시 받으세요';
+        mpToast('방 코드 ' + MP.code + ' 를 찾지 못했어요');
+      }
+    }
   };
   send();
   MP.joinTimer = setInterval(send, 1800);
@@ -7644,6 +7661,8 @@ function mpHostAdd(m){
     if (!MP.players.some(function(p){ return p.id === id; })){
       if (MP.phase === 'final' && MP.final) mpPub(MP.final);
       else mpPub({ t:'reject', to:id, reason:'busy' });
+    } else {
+      mpBroadcastState();
     }
     return;
   }
@@ -8041,8 +8060,9 @@ function mpFinalize(force){
   const K = clamp(MP.k, 1, Math.max(1, n - 1));
   const cut = Math.max(0, n - K);
   rows.forEach(function(r, i){ r.lose = i >= cut; });
+  const tieCut = cut > 0 && cut < n && rows[cut - 1].score === rows[cut].score;
   const payload = {
-    t:'final', roundId:MP.roundId, game:MP.game, k:K,
+    t:'final', roundId:MP.roundId, game:MP.game, k:K, tieCut:tieCut,
     ranking: rows.map(function(r){
       return { id:r.id, name:r.name, rank:r.rank, score:(r.done ? r.score : null),
                label:r.label, detail:r.detail, done:r.done, lose:r.lose };
@@ -8077,9 +8097,7 @@ function mpShowFinalBoard(m){
   const meEl = mpQ('#mpResMe');
   if (meEl){
     meEl.className = 'mpres-me ' + (meLose ? 'lose' : 'win');
-    meEl.innerHTML = '<span>' + (meLose
-      ? '💸 내가 오늘 쏘는 사람…!' + (myRow && myRow.score != null ? ' (' + myRow.rank + '위)' : '')
-      : '🎉 내가 오늘 커피 면제!' + (myRow && myRow.score != null ? ' (' + myRow.rank + '위)' : '')) + '</span>';
+    meEl.innerHTML = '<span>' + (meLose ? '💸 내가 오늘 쏘는 사람…!' : '🎉 내가 오늘 커피 면제!') + '</span>';
   }
   mpQ('#mpResWin').innerHTML =
     '<div class="h">🎉 축하합니다!</div>' +
@@ -8093,9 +8111,9 @@ function mpShowFinalBoard(m){
   mpQ('#mpResLose').innerHTML =
     '<div class="big">💸 한방 쏴~!</div>' +
     '<div class="who">' + m.ranking.filter(function(r){ return r.lose; }).map(function(r){
-      return '<b>' + esc(r.name) + (r.id === MP.myId ? ' ★' : '') + '</b>';
+      return '<b>' + esc(r.name) + '</b>님';
     }).join(', ') +
-      '님의 소중한 지갑으로<br>오늘 다 같이 한 잔!</div>' +
+      '의 소중한 지갑으로<br>오늘 다 같이 한 잔!</div>' +
     '<div class="tease">' + esc(fillName(pick(TEASE_LOSER), loseNames[0] || '')) + '</div>';
   mpQ('#mpResList').innerHTML = m.ranking.map(function(r){
     const medal = r.lose ? '☕' : (r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : r.rank === 3 ? '🥉' : String(r.rank));
@@ -8103,7 +8121,7 @@ function mpShowFinalBoard(m){
       '<span class="rk">' + medal + '</span>' +
       '<span class="nm">' + esc(r.name) + (r.id === MP.myId ? ' <em class="me">★</em>' : '') + '</span>' +
       '<span class="dt">' + esc(r.label || '') + '</span></div>';
-  }).join('');
+  }).join('') + (m.tieCut ? '<div class="mpres-note">점수가 같아 동점으로 갈린 자리가 있어요 · 한 판 더 어때요?</div>' : '');
   show('scr-mp-result');
   if (meLose) speakLine(loseNames.join(', ') + '님 한방 쏴! 오늘 다 같이 한 잔!');
   else speakLine('축하합니다 ' + MP.name + '님! 오늘 공짜 커피 확보!');
@@ -8160,8 +8178,9 @@ function mpBackRoom(){
   clearGame();
   mpCloseOverlays();
   stopMpConfetti();
+  MP.playingRound = MP.roundId || MP.playingRound;
   MP.phase = 'room'; MP.results = {}; MP.myResult = null; MP.final = null;
-  MP.finalizing = false; MP.done = false; MP.capture = false; MP.playingRound = 'p' + Date.now();
+  MP.finalizing = false; MP.done = false; MP.capture = false;
   if (MP.role === 'host'){ MP.roundId = ''; mpPub({ t:'room' }); mpBroadcastState(); }
   mpRenderRoom();
   show('scr-mp-room');
@@ -8401,13 +8420,14 @@ function soloLadder(root){
     rungs.push(row);
   }
   let W = 300, H = 240;
-  const padX = 16, padTop = 30, padBot = 38;
+  const padX = 22, padTop = 30, padBot = 34;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   function fit(){
-    W = box.clientWidth || 300;
-    H = box.clientHeight || 240;
+    const r = box.getBoundingClientRect();
+    W = Math.max(220, Math.round(r.width || box.clientWidth || 300));
+    H = Math.max(180, Math.round(r.height || box.clientHeight || 240));
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
-    cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    cv.style.width = '100%'; cv.style.height = '100%';
     cv.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   function cx(c){ return padX + (W - padX * 2) * (c + 0.5) / COLS; }
@@ -8435,7 +8455,7 @@ function soloLadder(root){
       g.fillText('?', cx(c), cy(-0.5) - 7);
       g.font = '900 12px Pretendard, sans-serif';
       g.fillStyle = 'rgba(255,255,255,.86)';
-      g.fillText(String(values[c]), cx(c), cy(ROWS - 0.5) + 18);
+      g.fillText(String(values[c]), Math.min(W - 10, Math.max(10, cx(c))), cy(ROWS - 0.3) + 14);
     }
     if (dot){
       g.beginPath();
@@ -8831,7 +8851,12 @@ window.addEventListener('resize', function(){
 });
 
 /* ---------------- boot ---------------- */
-MP.quitGame = function(){ mpBackRoom(); };
+MP.quitGame = function(){
+  if (MP.phase === 'play' && MP.role === 'guest' && !MP.done){
+    mpSendResult({ score: -1e9, label: '기권', detail: '기권' });
+  }
+  mpBackRoom();
+};
 MP.inviteUrl = mpInviteUrl;
 MP.testState = function(){ return { role:MP.role, phase:MP.phase, code:MP.code, k:MP.k, game:MP.game, players:MP.players.map(function(p){ return p.name; }), results:MP.results }; };
 (function mpBoot(){
