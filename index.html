@@ -1382,11 +1382,11 @@ body{
           <button id="mpCopyCode" class="btn ghost">⧉ 코드 복사</button>
         </div>
       </div>
+      <button id="mpRetry" class="btn ghost" style="height:42px;font-size:12.5px;display:none">🔄 연결 다시 시도</button>
       <div class="card">
         <div class="row-head"><span class="lab">참가자</span><span class="hint" id="mpCount">1 / 8</span></div>
         <div class="mp-members" id="mpMemList"></div>
-      </div>
-      <div class="card">
+      </div>      <div class="card">
         <div class="row-head"><span class="lab">당첨(패자) 인원</span><span class="hint" id="mpKHint">1명 독박</span></div>
         <div class="count-row" id="mpKBtns"></div>
       </div>
@@ -7413,6 +7413,8 @@ function mpSetConn(txt, tone){
   const el = mpQ('#mpRoomSub'); if (!el) return;
   el.textContent = (tone === 'bad' ? '⚠️ ' : tone === 'wait' ? '⏳ ' : '🟢 ') + txt;
   el.style.color = tone === 'bad' ? '#ffb3c2' : tone === 'wait' ? '#ffd08a' : '#9df0d8';
+  const rt = mpQ('#mpRetry');
+  if (rt) rt.style.display = tone === 'bad' ? '' : 'none';
 }
 function mpMyColor(){
   for (let i = 0; i < MP.players.length; i++) if (MP.players[i].id === MP.myId) return COLORS[i % COLORS.length];
@@ -8838,6 +8840,14 @@ $('#mpCodeIn').addEventListener('keydown', function(e){
   if (e.key === 'Enter'){ e.preventDefault(); mpQ('#mpJoin').click(); }
 });
 $('#mpStart').addEventListener('click', mpStartPressed);
+$('#mpRetry').addEventListener('click', function(){
+  if (!MP.role || !MP.code) return;
+  Sfx.tick();
+  MP.reconnectTries = 0;
+  mpSetConn('연결 중…', 'wait');
+  if (MP.client){ try { MP.client.end(true); } catch(e){} MP.client = null; MP.connected = false; }
+  mpConnectThen();
+});
 $('#mpAgain').addEventListener('click', function(){ mpBackRoom(); });
 $('#mpLeave').addEventListener('click', function(){ mpLeaveRoom(true); });
 $('#mpCopyLink').addEventListener('click', function(){
